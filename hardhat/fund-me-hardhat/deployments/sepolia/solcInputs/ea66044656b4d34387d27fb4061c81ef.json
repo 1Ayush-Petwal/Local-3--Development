@@ -1,0 +1,42 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\n// solhint-disable-next-line interface-starts-with-i\ninterface AggregatorV3Interface {\n  function decimals() external view returns (uint8);\n\n  function description() external view returns (string memory);\n\n  function version() external view returns (uint256);\n\n  function getRoundData(\n    uint80 _roundId\n  ) external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);\n\n  function latestRoundData()\n    external\n    view\n    returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);\n}\n"
+    },
+    "contracts/FundMe.sol": {
+      "content": "// AIM:\n// Get funds from the users\n// Withdraw funds\n// Set Minimum funding value in USD\n\n// SPDX-License-Identifier: MIT\npragma solidity ^0.8.18;\n\nimport {PriceConverter} from \"./PriceConverter.sol\";\nimport {AggregatorV3Interface} from \"@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol\";\n\nerror FundMe__notOwner();\n\n/**@title A sample Funding Contract\n * @author Ayush Petwal\n * @notice This contract is for creating a sample funding contract\n * @dev This implements price feeds as our library\n */\n\ncontract FundMe {\n    // all the uint256 can use the library PriceConvertor\n    using PriceConverter for uint256;\n\n    uint256 constant MIN_USD = 5e18;\n    address public immutable i_owner;\n\n    address[] public funders;\n    mapping(address funder => uint256 amountFunded)\n        public addressToAmountFunded;\n\n    AggregatorV3Interface public priceFeed;\n\n    constructor(address priceFeedAddr) {\n        i_owner = msg.sender;\n        priceFeed = AggregatorV3Interface(priceFeedAddr);\n    }\n\n    receive() external payable {\n        fund();\n    }\n\n    fallback() external payable {\n        fund();\n    }\n\n    modifier onlyOwner() {\n        // require(msg.sender == i_owner, \"Must be owner !!!\");\n        // Gas Optimised\n        if (msg.sender != i_owner) {\n            revert FundMe__notOwner();\n        }\n        _; // After checking then execute the function\n    }\n\n    function fund() public payable {\n        require(\n            msg.value.getConversionRate(priceFeed) >= MIN_USD,\n            \"didn't have enough eth\"\n        );\n        funders.push(msg.sender);\n        addressToAmountFunded[msg.sender] += msg.value;\n    }\n\n    // require(bool condition) :->\n    // -> reverts if the condition is not met - to be used for errors in inputs or external components.\n    // what is a revert ?\n    // Undo any actions that have been done, and send the remaining gas back !!!\n\n    function withdraw() public onlyOwner {\n        // Only allow the owner to withdraw the funds\n        // Two ways 1) require  2) modifier\n        // require(msg.sender == owner, \"Must be owner to withdraw !!!\");\n        for (\n            uint256 funderIndex = 0;\n            funderIndex < funders.length;\n            funderIndex++\n        ) {\n            address funder = funders[funderIndex];\n            addressToAmountFunded[funder] = 0;\n        }\n        // reseting the array <- Creating a new address array object\n        funders = new address[](0);\n        //It **creates a new dynamic array with zero elements** and assigns it to `funders`.\n\n        // Three ways to send eth from a contract\n        //transfer <-  if fails then reverts\n        //   payable(msg.sender).transfer(address(this).balance);\n        // //send <- if fails returns a bool false;\n        // bool sendStatus = payable(msg.sender).send(address(this).balance);\n        // require(sendStatus, \"Couldn't send the funds \");\n\n        //call\n        (bool callStatus, ) = payable(msg.sender).call{\n            value: address(this).balance\n        }(\"\");\n        require(callStatus, \"Call failed !!!\");\n    }\n}\n// Getting the Global special variables\n// https://docs.soliditylang.org/en/v0.8.29/units-and-global-variables.html\n"
+    },
+    "contracts/PriceConverter.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.18;\n\nimport {AggregatorV3Interface} from \"@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol\";\n\nlibrary PriceConverter {\n    // Getting real time Data from the data feeds\n    function getPrice(\n        AggregatorV3Interface priceFeed\n    ) internal view returns (uint256) {\n        // Interacting with the contract we need two things\n        // Address 0x694AA1769357215DE4FAC081bf1f309aDC325306\n        // ABI (Interface of functions )\n        (, int256 price, , , ) = priceFeed.latestRoundData();\n\n        return uint256(price * 1e10);\n    }\n\n    function getConversionRate(\n        uint256 ethAmount,\n        AggregatorV3Interface priceFeed\n    ) internal view returns (uint256) {\n        // ethAmount = 1e18\n        // ethPrice = 2000e18\n        // ethAmountinUSD = 2000\n        uint256 ethPrice = getPrice(priceFeed);\n        uint256 ethAmountinUSD = (ethAmount * ethPrice) / 1e18;\n        return ethAmountinUSD;\n    }\n\n    function getVersion() internal view returns (uint256) {\n        return\n            AggregatorV3Interface(0x694AA1769357215DE4FAC081bf1f309aDC325306)\n                .version();\n    }\n}\n"
+    }
+  },
+  "settings": {
+    "evmVersion": "paris",
+    "optimizer": {
+      "enabled": false,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}
